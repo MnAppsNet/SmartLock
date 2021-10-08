@@ -7,6 +7,7 @@ using System.IO;
 using System.Text.Json;
 using System.Text;
 using System.Runtime.InteropServices.WindowsRuntime;
+using Windows.UI.Core;
 
 namespace SmartLock
 {
@@ -14,7 +15,7 @@ namespace SmartLock
     {
         
         private static readonly string path = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-        private const string settingsFileName = "settings.json";
+        private const string settingsFileName = "smartlock.json";
 
         //Private Constrants :
         private const string SALT = @"nF#(f)J<C3494c,m$<)@!~r,@+\##9r<$ fjdlfsjmgs4lsefc.,a<"; //SALT applied on password to generate secret key for AES encryption
@@ -86,13 +87,17 @@ namespace SmartLock
                     userID = GetUserID(userPassword)
                 };
                 KeyCredentialCreationOption optionNew = KeyCredentialCreationOption.ReplaceExisting;
+                
                 KeyCredential = await KeyCredentialManager.RequestCreateAsync(settings.userID, optionNew);
+                
             }
             else
             {
                 //If settings file exists, Windows Hello credentials have already been generated,
                 //request them and get the encryption key
                 KeyCredential = await KeyCredentialManager.OpenAsync(settings.userID);
+               
+                
             }
 
             if (KeyCredential.Status != KeyCredentialStatus.Success)
