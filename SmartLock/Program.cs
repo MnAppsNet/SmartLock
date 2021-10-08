@@ -20,7 +20,9 @@ namespace SmartLock
 
     class Program
     {
-        
+        [System.Runtime.InteropServices.DllImport("user32.dll")]
+        static extern bool ShowWindow(IntPtr hWnd, int nCmdShow);
+
         static async Task Main(string[] args)
         {//<<= Entry point =>>
             if (args.Length == 0)
@@ -29,6 +31,10 @@ namespace SmartLock
             }
             else
             {//Execution with arguments
+                //Hide console :
+                IntPtr h = System.Diagnostics.Process.GetCurrentProcess().MainWindowHandle;
+                ShowWindow(h, 0);
+                //Handle commands :
                 await HandleCommands(args);
             }
         }
