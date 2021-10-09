@@ -14,14 +14,32 @@ namespace SmartLock
 {
     class SmartLock
     {
-
+        //External native windows functions (external unmanaged dynamic-link library [DLL]) - Start >
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        static extern bool GetCursorPos(out POINT lpPoint);
+        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        public struct POINT
+        {
+            public int X;
+            public int Y;
+
+            public static implicit operator System.Drawing.Point(POINT point)
+            {
+                return new System.Drawing.Point(point.X, point.Y);
+            }
+        }
+        //External native windows functions (external unmanaged dynamic-link library [DLL]) - < End
+
         private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
         private const UInt32 SWP_NOSIZE = 0x0001;
+        private const UInt32 SWP_NOSENDCHANGING = 0x0400;
+        private const UInt32 SWP_SHOWWINDOW = 0x0040;
         private const UInt32 SWP_NOMOVE = 0x0002;
-        private const UInt32 TOPMOST_FLAGS = SWP_NOMOVE | SWP_NOSIZE;
+        private const UInt32 TOPMOST_FLAGS = SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOSENDCHANGING | SWP_NOMOVE;
 
         private static readonly string path = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
         private const string settingsFileName = "smartlock.json";
@@ -383,31 +401,34 @@ namespace SmartLock
             Task bringWindowsHelloPopupToFront = new Task(() =>
             {
                 Process[] processes;
-                Process windowsHelloPopup = null;
-                int i = 10; //Iterate for 10 seconds until the window is found
+                //POINT cursor;
+                int i = 20; //Iterate for ~10 seconds until the window is found (20 iteration every 500ms)
+                Task.Delay(2000); //Wait 2 seconds before start searching
                 do
                 {
+                    Task.Delay(500);//Wait 0.5 second
                     processes = Process.GetProcesses();
-                    foreach (Process p in processes)
+                    Process process = Array.Find<Process>(processes, (p) =>
                     {
                         try
                         {
-                            if (p == null) continue;
-                            if (p.MainModule.ModuleName != windowsHelloAuthorizationProcess) continue;
-                            windowsHelloPopup = p;
-                            break;
+                            return p.MainModule.ModuleName == windowsHelloAuthorizationProcess;
                         }
-                        catch (Exception e)
+                        catch (Exception)
                         {
-                            continue;
+                            return false;
                         }
+                    });
+                    if (process != null)
+                    {
+                        //GetCursorPos(out cursor);
+                        int x = 0; // cursor.X;
+                        int y = 0; // cursor.Y;
+                        SetWindowPos(process.MainWindowHandle, HWND_TOPMOST, x, y, 0, 0, TOPMOST_FLAGS);
+                        i = -1; //Exit loop
                     }
                     i--;
-                    Task.Delay(1000);//Wait 1 second
-                    if (windowsHelloRequestTask.Status != Windows.Foundation.AsyncStatus.Started) break;
-                } while (windowsHelloPopup == null && i >= 0);
-                if (windowsHelloPopup != null)
-                    SetWindowPos(windowsHelloPopup.MainWindowHandle, HWND_TOPMOST, 0, 0, 0, 0, TOPMOST_FLAGS);
+                } while (i >= 0);
             });
             Task<KeyCredentialRetrievalResult> requestTast = Task.Run(async () => { return await windowsHelloRequestTask; });
             bringWindowsHelloPopupToFront.Start();
