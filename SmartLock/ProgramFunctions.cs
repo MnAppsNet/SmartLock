@@ -11,30 +11,30 @@ namespace SmartLock
         {//Initialize smartLock instance
             try
             {
-                Console.WriteLine("Initializing SmartLock instance...");
+                Console.WriteLine(AppSettings.Texts.Get(AppTexts.INITIALIZING));
                 SmartLock smartLock = new SmartLock();
                 if (statusLogging)
                     smartLock.StatusChange += statusChangeHandler;
-                UInt16 status = await smartLock.SetupUser();
+                string status = await smartLock.SetupUser();
                 while (status != Status.READY)
                 {
                     switch (status)
                     {
                         case Status.CRED_ERROR:
-                            Console.WriteLine("Error initializing credentials");
+                            ShowException(AppSettings.Texts.Get(AppTexts.INITIALIZING_ERROR), "INITIALIZATION");
                             return null;
                         case Status.NO_SUPPORT:
-                            Console.WriteLine("Windows hello not supported or not enabled");
+                            ShowException(AppSettings.Texts.Get(AppTexts.WINDOWS_HELLO_NOT_SUPPORTED), "INITIALIZATION");
                             return null;
                         case Status.INPUT_PASSWORD:
                             string userInput; string userInput2;
                             do
                             {
-                                Console.WriteLine("Input a password (remember it, it is needed as a backup decryption way) :");
+                                Console.WriteLine(AppSettings.Texts.Get(AppTexts.INPUT_NEW_PASSWORD));
                                 Console.ForegroundColor = Console.BackgroundColor;
                                 userInput = Console.ReadLine();
                                 Console.ForegroundColor = ConsoleColor.White;
-                                Console.WriteLine("One more time :");
+                                Console.WriteLine(AppSettings.Texts.Get(AppTexts.INPUT_PASSWORD_AGAIN));
                                 Console.ForegroundColor = Console.BackgroundColor;
                                 userInput2 = Console.ReadLine();
                                 Console.ForegroundColor = ConsoleColor.White;
@@ -48,7 +48,7 @@ namespace SmartLock
                         default:
                             return null;
                     }
-                    status = smartLock.GetStatus();
+                    status = smartLock.GetCurrentStatus();
                 }
                 return smartLock;
             }catch(Exception e)
@@ -57,20 +57,20 @@ namespace SmartLock
                 return null;
             }
         }
-        static public void DecryptWithPassword(SmartLock smartLock, string data = "", string password = "", bool logging = true)
+        static public void DecryptWithPassword(string data = "", string password = "", bool logging = true)
         {
             try
             {
-                if (smartLock == null) return;
+                SmartLock smartLock = new SmartLock();
                 Console.Clear();
                 if (data == "")
                 {
-                    Console.WriteLine("Input a file path or string :");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.INPUT_FILE_OR_STRING));
                     data = Console.ReadLine();
                 }
                 if (password == "")
                 {
-                    Console.WriteLine("Input your password :");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.INPUT_PASSWORD));
                     Console.ForegroundColor = Console.BackgroundColor;
                     password = Console.ReadLine();
                     Console.ForegroundColor = ConsoleColor.White;
@@ -81,7 +81,14 @@ namespace SmartLock
                     byte[] fileBytes = File.ReadAllBytes(data);
                     if (smartLock.DecryptWithPassword(ref fileBytes, password) == Status.DECRYPTED)
                     {
-                        File.WriteAllBytes(data, fileBytes);
+                        string filePath = GetDecryptedFilePath(data);
+                        File.WriteAllBytes(filePath, fileBytes);
+                        if (AppSettings.Properties.ReplaceOriginalFile)
+                            File.Delete(data);
+                        if (logging)
+                        {
+                            Console.WriteLine(AppSettings.Texts.Get(AppTexts.FILE_DECRYPTED));
+                        }
                     }
                 }
                 else
@@ -101,7 +108,7 @@ namespace SmartLock
                 if (logging)
                 {
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine("Press enter to continue...");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_CONTINUE));
                     Console.ReadLine();
                 }
             }catch(Exception e)
@@ -113,13 +120,16 @@ namespace SmartLock
         {//Encrypt/Descrypt string using the given smartLock instance
             try
             {
-                if (smartLock == null) return;
                 Console.Clear();
+                if (smartLock == null) {
+                    ShowException(AppSettings.Texts.Get(AppTexts.NOT_AUTHORIZED));
+                    return; 
+                }
                 string input = str;
                 //bool transformed = false;
                 if (input == "")
                 {
-                    Console.WriteLine("Input a string : ");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.INPUT_STRING));
                     input = Console.ReadLine(); //Get file path
                 }
                 if (smartLock.DataEncrypted(input))
@@ -155,7 +165,7 @@ namespace SmartLock
                 if (logging)
                 {
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine("Press enter to continue...");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_CONTINUE));
                     Console.ReadLine();
                 }
             }catch(Exception e)
@@ -167,8 +177,12 @@ namespace SmartLock
         {//Encrypt/Descrypt file using the given smartLock instance
             try
             {
-                if (smartLock == null) return;
                 Console.Clear();
+                if (smartLock == null)
+                {
+                    ShowException(AppSettings.Texts.Get(AppTexts.NOT_AUTHORIZED));
+                    return;
+                }
                 string file = filePath;
                 if (file != "")
                 {
@@ -179,12 +193,12 @@ namespace SmartLock
                 }
                 if (file == "")
                 {
-                    Console.Write("Input file path: ");
+                    Console.Write(AppSettings.Texts.Get(AppTexts.INPUT_FILE));
                     file = Console.ReadLine(); //Get file path
                 }
                 if (!File.Exists(file))
                 {
-                    Console.WriteLine("File doesn't exist");
+                    ShowException(AppSettings.Texts.Get(AppTexts.FILE_NOT_EXIST), "TRANSFORM_FILE");
                     return;
                 }
                 byte[] fileBytes = File.ReadAllBytes(file); //Read file bytes in memory
@@ -215,7 +229,7 @@ namespace SmartLock
                 if (logging)
                 {
                     Console.ForegroundColor = ConsoleColor.Gray;
-                    Console.WriteLine("Press enter to continue...");
+                    Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_CONTINUE));
                     Console.ReadLine();
                 }
             }catch(Exception e)
@@ -364,27 +378,35 @@ namespace SmartLock
         {
             Console.Clear();
             Console.WriteLine((messageGroup != "")?(messageGroup + ": " + e.Message):e.Message);
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_CONTINUE));
+            Console.ReadLine();
+        }
+        static private void ShowException(string exception, string messageGroup = "")
+        {
+            Console.Clear();
+            Console.WriteLine((messageGroup != "") ? (messageGroup + ": " + exception) : exception);
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_CONTINUE));
             Console.ReadLine();
         }
         static private void ShowEncryptedString(string str)
         {
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Encrypted string :");
-            Console.WriteLine("START >");
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.ENCRYPTED_STRING));
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.START_OF_STRING));
             Console.ForegroundColor = ConsoleColor.Red;
             Console.WriteLine(str);
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("< END");
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.END_OF_STRING));
         }
         static private void ShowDecryptedString(string str)
         {
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("Decrypted string :");
-            Console.WriteLine("START >");
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.DECRYPTED_STRING));
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.START_OF_STRING));
             Console.ForegroundColor = ConsoleColor.Green;
             Console.WriteLine(str);
             Console.ForegroundColor = ConsoleColor.White;
-            Console.WriteLine("< END");
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.END_OF_STRING));
         }
         static private string GetDecryptedFilePath(string file)
         {

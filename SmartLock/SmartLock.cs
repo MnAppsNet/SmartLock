@@ -18,40 +18,36 @@ namespace SmartLock
         [System.Runtime.InteropServices.DllImport("user32.dll")]
         [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
         static extern bool SetWindowPos(IntPtr hWnd, IntPtr hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
-        [System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
-        [return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
-        static extern bool GetCursorPos(out POINT lpPoint);
-        [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
-        public struct POINT
-        {
-            public int X;
-            public int Y;
+        //[System.Runtime.InteropServices.DllImport("user32.dll", SetLastError = true)]
+        //[return: System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.Bool)]
+        //static extern bool GetCursorPos(out POINT lpPoint);
+        //[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+        //public struct POINT
+        //{
+        //    public int X;
+        //    public int Y;
 
-            public static implicit operator System.Drawing.Point(POINT point)
-            {
-                return new System.Drawing.Point(point.X, point.Y);
-            }
-        }
+        //    public static implicit operator System.Drawing.Point(POINT point)
+        //    {
+        //        return new System.Drawing.Point(point.X, point.Y);
+        //    }
+        //}
         //External native windows functions (external unmanaged dynamic-link library [DLL]) - < End
-
-        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1);
-        private const UInt32 SWP_NOSIZE = 0x0001;
-        private const UInt32 SWP_NOSENDCHANGING = 0x0400;
-        private const UInt32 SWP_SHOWWINDOW = 0x0040;
-        private const UInt32 SWP_NOMOVE = 0x0002;
-        private const UInt32 TOPMOST_FLAGS = SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOSENDCHANGING | SWP_NOMOVE;
-
-        private static readonly string path = Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-        private const string settingsFileName = "smartlock.json";
-
+        
         //Private Constrants :
         private const string SALT = @"nF#(f)J<C3494c,m$<)@!~r,@+\##9r<$ fjdlfsjmgs4lsefc.,a<"; //SALT applied on password to generate secret key for AES encryption
         private const string VECTOR = @"i#9di2)3%Fd:ewfR";  //Initialization vector used with AES encryption, 16-byte
         private const string ENCRYPTED_IDENTIFIER = @"SmartLock_Encrypted_Data_osfj93fjso93fj39rw3"; //A string used to generate the indentifier used to understand if data are encrypted
 
         //Private Variables :
-        private UInt16 status;                      //Set to true if Security instance is ready to be used
-        private Settings settings;                  //User settings
+        private static readonly IntPtr HWND_TOPMOST = new IntPtr(-1); //Windows TOPMOST indicator
+        private const UInt32 SWP_NOSIZE = 0x0001;                     //Don't change window size indicator
+        private const UInt32 SWP_NOSENDCHANGING = 0x0400;             //Don't allow other window changes indicator
+        private const UInt32 SWP_SHOWWINDOW = 0x0040;                 //Show windpow indicator
+        private const UInt32 SWP_NOMOVE = 0x0002;                     //Don't change window possition indicator
+        private const UInt32 TOPMOST_FLAGS = SWP_SHOWWINDOW | SWP_NOSIZE | SWP_NOSENDCHANGING | SWP_NOMOVE; //Flags above combined
+
+        private string status;                      //Set to true if Security instance is ready to be used
         private string encryptionKey;               //encryptionKey encrypted with the instanceKey
         private string encryptedIdentifier;         //An identifier used to understand if a file is encrypted with SmartLock
         private readonly SHA256 hash;               //SHA256 hash instance
@@ -59,7 +55,7 @@ namespace SmartLock
         private readonly string instanceKey;        //Randomly generated key used to encrypt important data in memory
 
         //Events :
-        public delegate void StatusChangeHandler(UInt16 status);
+        public delegate void StatusChangeHandler(string status);
         public event StatusChangeHandler StatusChange;
 
         //***************
@@ -82,11 +78,15 @@ namespace SmartLock
         //*****************
         // Public Section *
         //******************************************************************************************************************************************
-        public UInt16 GetStatus()
+        public string GetCurrentStatus()
         {
-            return status; //Return status of Security instance
+            return status; //Return current status of SmartLock instance
         }
-        public async Task<UInt16> SetupUser(string userPassword = "")
+        public string GetCurrentStatusDescription()
+        {
+            return Status.Get(status); //Return current status description of SmartLock instance
+        }
+        public async Task<string> SetupUser(string userPassword = "")
         {
             //Local viriables :
             KeyCredentialRetrievalResult KeyCredential;                     //Credential results of Windows Hello (key pair managed by Windows Hello libraries)
@@ -97,35 +97,28 @@ namespace SmartLock
                 ChangeStatus(Status.NO_SUPPORT);
                 return status;
             }
-            LoadSettings();
-            if (settings.userID == null || settings.userID == "")
+            if (SettingsHandler.Settings.userID == null)
             {
                 if (userPassword == "")
                 {
-                    //If settings file doesn't exists, no ecryption key is configured yet
+                    //If a userID doesn't exists, no ecryption key is configured yet
                     //Ask for a user password to generate a new encryption key
                     ChangeStatus(Status.INPUT_PASSWORD);
                     return status;
                 }
-                //If no settings file exists and a password is given, create a new credential in Windows Hello,
+                //If no userID exist and a password is given, create a new credential in Windows Hello,
                 //generate an encryption key and store necessary values
-                settings = new Settings
-                {
-                    userID = GetUserID(userPassword)
-                };
+                SettingsHandler.Settings.userID = GetUserID(userPassword);
 
-                //KeyCredentialCreationOption optionNew = KeyCredentialCreationOption.ReplaceExisting;
-                //KeyCredential = KeyCredentialManager.RequestCreateAsync(settings.userID, optionNew);
                 KeyCredential = await ShowWindowsHelloPopup(true);
             }
             else
             {
-                //If settings file exists, Windows Hello credentials have already been generated,
+                //If a UserID exists, Windows Hello credentials have already been generated,
                 //request them and get the encryption key
                 KeyCredential = await ShowWindowsHelloPopup(false);
 
             }
-
             if (KeyCredential.Status != KeyCredentialStatus.Success)
             {
                 ChangeStatus(Status.CRED_ERROR);
@@ -133,19 +126,19 @@ namespace SmartLock
             }
 
             //Generate encryption key :
-            string key = await SignString(KeyCredential.Credential, settings.userID);
+            string key = await SignString(KeyCredential.Credential, SettingsHandler.Settings.userID);
             if (key == null)
             {
-                ChangeStatus(Status.NO_SIGN);
+                ChangeStatus(Status.NOT_AUTHORIZED);
                 return status; //An error occured during the generation of the encryption key
             }
             //Validate encryption key :
-            if ((settings.key == "" || settings.key == null) && userPassword != "") //<= Initial run
+            if ((SettingsHandler.Settings.key == "" || SettingsHandler.Settings.key == null) && userPassword != "") //<= Initial run
             {
                 //In case of initial execution, gather the needed key values :
-                settings.key = EncryptString(key, userPassword);                                          //Save the key encrypted with the user password
-                settings.keyHash = GetFingerprint(key); //Save the hash of the key
-                SaveSettings();
+                SettingsHandler.Settings.key = EncryptString(key, userPassword);                                          //Save the key encrypted with the user password
+                SettingsHandler.Settings.keyHash = GetFingerprint(key); //Save the hash of the key
+                SettingsHandler.Save();
             }
             else //<= Check if key generated is valid before file encryption
             {
@@ -162,9 +155,9 @@ namespace SmartLock
             ChangeStatus(Status.READY);
             return status; //Security instance is ready to encrypt/decrypt files
         }
-        public UInt16 EncryptString(ref string str)
+        public string EncryptString(ref string str)
         {
-            UInt16 results;
+            string results;
             try
             {
                 byte[] strBytes = Encoding.UTF8.GetBytes(str);
@@ -181,9 +174,9 @@ namespace SmartLock
             }
             return results;
         }
-        public UInt16 DecryptString(ref string str, string encKey = "")
+        public string DecryptString(ref string str, string encKey = "")
         {
-            UInt16 results;
+            string results;
             try
             {
                 byte[] strBytes = Convert.FromBase64String(str);
@@ -200,7 +193,7 @@ namespace SmartLock
             }
             return results;
         }
-        public UInt16 Encrypt(ref byte[] data)
+        public string Encrypt(ref byte[] data)
         {
             if (encryptionKey == null)
             {
@@ -243,7 +236,7 @@ namespace SmartLock
             ChangeStatus(Status.ENCRYPTED);
             return status;
         }
-        public UInt16 Decrypt(ref byte[] data, string encKey = "")
+        public string Decrypt(ref byte[] data, string encKey = "")
         {
             string key = encryptionKey;
             if (encKey != "") 
@@ -297,33 +290,42 @@ namespace SmartLock
             ChangeStatus(Status.DECRYPTED);
             return status;
         }
-        public UInt16 DecryptWithPassword(ref string input, string password)
+        public string DecryptWithPassword(ref string input, string password)
         {
-            if (settings.key == null || settings.key == "")
+            if (SettingsHandler.Settings.key == null || SettingsHandler.Settings.key == "")
             {
                 ChangeStatus(Status.NO_KEY);
                 return status; //<= No encryption key is configured
             }
-            string encKey = DecryptString(settings.key,password);
-            string f = GetFingerprint(encKey);
-            if (f != settings.keyHash)
+            string encKey;
+            try
+            {
+                encKey = DecryptString(SettingsHandler.Settings.key, password);
+                string f = GetFingerprint(encKey);
+                if (f != SettingsHandler.Settings.keyHash)
+                {
+                    ChangeStatus(Status.WRONG_KEY);
+                    return status;
+                }
+            }
+            catch (Exception)
             {
                 ChangeStatus(Status.WRONG_KEY);
                 return status;
             }
             return DecryptString(ref input,encKey);
         }
-        public UInt16 DecryptWithPassword(ref byte[] input, string password)
+        public string DecryptWithPassword(ref byte[] input, string password)
         {
             try
             {
-                if (settings.key == null || settings.key == "")
+                if (SettingsHandler.Settings.key == null || SettingsHandler.Settings.key == "")
                 {
                     ChangeStatus(Status.NO_KEY);
                     return status; //<= No encryption key is configured
                 }
-                string encKey = DecryptString(settings.key, password);
-                if (GetFingerprint(encKey) != settings.keyHash)
+                string encKey = DecryptString(SettingsHandler.Settings.key, password);
+                if (GetFingerprint(encKey) != SettingsHandler.Settings.keyHash)
                 {
                     ChangeStatus(Status.WRONG_KEY);
                     return status;
@@ -374,17 +376,13 @@ namespace SmartLock
         }
         public void SetLanguage(string lang)
         {//Set SmartLock output message language
-            if (settings.userID == null || settings.userID == "")
+            if (!SettingsHandler.Settings.status.ContainsKey(lang))
             {
-                LoadSettings();
+                ChangeStatus(Status.LANG_NOT_VALID);
+                return;
             }
-            if (settings.userID != null && settings.userID != "")
-            {
-                if (!(Status.Descriptions.ContainsKey(lang))) return;
-                settings.language = lang;
-                Status.language = settings.language;
-                SaveSettings();
-            }
+            SettingsHandler.Settings.language = lang;
+            SettingsHandler.Save();
         }
         //******************
         // Private Section *
@@ -395,9 +393,9 @@ namespace SmartLock
             KeyCredentialCreationOption optionNew = KeyCredentialCreationOption.ReplaceExisting;
             Windows.Foundation.IAsyncOperation<KeyCredentialRetrievalResult> windowsHelloRequestTask;
             if (newUser)
-                windowsHelloRequestTask = KeyCredentialManager.RequestCreateAsync(settings.userID, optionNew);
+                windowsHelloRequestTask = KeyCredentialManager.RequestCreateAsync(SettingsHandler.Settings.userID, optionNew);
             else
-                windowsHelloRequestTask = KeyCredentialManager.OpenAsync(settings.userID);
+                windowsHelloRequestTask = KeyCredentialManager.OpenAsync(SettingsHandler.Settings.userID);
             Task bringWindowsHelloPopupToFront = new Task(() =>
             {
                 Process[] processes;
@@ -433,50 +431,6 @@ namespace SmartLock
             Task<KeyCredentialRetrievalResult> requestTast = Task.Run(async () => { return await windowsHelloRequestTask; });
             bringWindowsHelloPopupToFront.Start();
             return await requestTast;
-        }
-        private void LoadSettings()
-        {
-            string settingsFile = path + "\\" + settingsFileName; //Location of settings file
-            try
-            {
-                if (File.Exists(settingsFile))
-                {
-                    string JSON = File.ReadAllText(settingsFile);
-                    settings = JsonSerializer.Deserialize<Settings>(JSON);
-                    if (settings.language != null && settings.language != "")
-                    {
-                        if (Status.Descriptions.ContainsKey(settings.language))
-                            Status.language = settings.language;
-                    }
-                }
-                else
-                {
-                    settings = new Settings
-                    {
-                        userID = null,
-                        key = null,
-                        keyHash = null,
-                        language = null
-                    };
-                }
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
-        }
-        private void SaveSettings()
-        {
-            try
-            {
-                string settingsFile = path + "\\" + settingsFileName; //Location of settings file
-                string JSON = JsonSerializer.Serialize<Settings>(settings);
-                File.WriteAllText(settingsFile, JSON);
-            }
-            catch (Exception e)
-            {
-                throw e;
-            }
         }
         private async Task<bool> WindowsHelloAvailable()
         {//Checks if windows hello is supported and used by the user
@@ -551,7 +505,7 @@ namespace SmartLock
             }
             return Encoding.UTF8.GetString(decrypted).Trim('\0');
         }
-        private void ChangeStatus(UInt16 stat)
+        private void ChangeStatus(string stat)
         {
             status = stat;
             if (StatusChange != null)

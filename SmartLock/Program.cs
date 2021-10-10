@@ -9,13 +9,13 @@ namespace SmartLock
     class Commands
     {//Commands when application is run with arguments
         public const string file = "-f";
-        public const string fileDescription = "-f <file path> : Transform file";
+        public static readonly string fileDescription = AppSettings.Texts.Get(AppTexts.COMMAND_F);
         public const string text = "-t";
-        public const string textDescription = "-t <string> : Transform text";
+        public static readonly string textDescription = AppSettings.Texts.Get(AppTexts.COMMAND_T);
         public const string decrypt = "-d";
-        public const string decrypttDescription = "-d <file path or string> <password> : Decrypt data with user password";
+        public static readonly string decrypttDescription = AppSettings.Texts.Get(AppTexts.COMMAND_D);
         public const string help = "-h";
-        public const string helpDescription = "-h : Show available commands";
+        public static readonly string helpDescription = AppSettings.Texts.Get(AppTexts.COMMAND_H);
     }
 
     class Program
@@ -55,7 +55,7 @@ namespace SmartLock
                         Functions.TransformString(smartLock);
                         break;
                     case 3://Decrypt with user password
-                        Functions.DecryptWithPassword(smartLock);
+                        Functions.DecryptWithPassword();
                         break;
                     case 4://Show settings
                         Settings();
@@ -66,7 +66,7 @@ namespace SmartLock
                 }
             } while (!exit);
             Console.WriteLine("----------------------------------------");
-            Console.WriteLine("Press ENTER to exit");
+            Console.WriteLine(AppSettings.Texts.Get(AppTexts.PRESS_ENTER_TO_EXIT));
             Console.ReadLine();
         }
         static private UInt16 ShowOptions()
@@ -80,15 +80,15 @@ namespace SmartLock
                 Console.WriteLine("SmartLock");
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("----------------------------------------");
-                Console.WriteLine("Options :");
+                Console.WriteLine(AppSettings.Texts.Get(AppTexts.OPTIONS));
                 Console.ForegroundColor = ConsoleColor.Gray;
-                Console.WriteLine("\t1.Transform file");
-                Console.WriteLine("\t2.Transform string");
-                Console.WriteLine("\t3.Decrypt data with password");
-                Console.WriteLine("\t4.Settings");
-                Console.WriteLine("\t5.Exit");
+                Console.WriteLine("\t1." + AppSettings.Texts.Get(AppTexts.TRANSFORM_FILE));
+                Console.WriteLine("\t2."+ AppSettings.Texts.Get(AppTexts.TRANSFORM_STRING));
+                Console.WriteLine("\t3." + AppSettings.Texts.Get(AppTexts.DECRYPT_WITH_PASS));
+                Console.WriteLine("\t4."+ AppSettings.Texts.Get(AppTexts.SETTINGS));
+                Console.WriteLine("\t5." + AppSettings.Texts.Get(AppTexts.EXIT));
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Select an option: ");
+                Console.Write(AppSettings.Texts.Get(AppTexts.SELECT_OPTION) + " ");
                 string userInput = Console.ReadLine();
                 if (userInput.Length > 0)
                     option = userInput.Substring(0, 1);
@@ -126,23 +126,23 @@ namespace SmartLock
         {
             string validOptions = "1.2.3.4.";
             string option;
-            string ContectMenu = ((Functions.ContectMenuActionActive()) ? "Disable" : "Enable") + " context menu";
-            string ReplaceOriginalFile = ((AppSettings.Properties.ReplaceOriginalFile) ?"Don't replace":"Replace") + " original file after transformation";
-            string ExtensionAssiciation = ((Functions.FileExtensionAssociated()) ? "Dissociate" : "Associate") + " file extension '" + AppSettings.EncryptedFileExtention + "'";
+            string ContectMenu = ((Functions.ContectMenuActionActive()) ? AppSettings.Texts.Get(AppTexts.DISABLE) : AppSettings.Texts.Get(AppTexts.ENABLE)) + AppSettings.Texts.Get(AppTexts.CONTEXT_MENU);
+            string ReplaceOriginalFile = ((AppSettings.Properties.ReplaceOriginalFile) ? AppSettings.Texts.Get(AppTexts.DONT_REPLACE) : AppSettings.Texts.Get(AppTexts.REPLACE)) + " " + AppSettings.Texts.Get(AppTexts.FILE_AFTER_TRANSFORMATION);
+            string ExtensionAssiciation = ((Functions.FileExtensionAssociated()) ? AppSettings.Texts.Get(AppTexts.DISSOCIATE) : AppSettings.Texts.Get(AppTexts.ASSSOCIATE)) + " " + AppSettings.Texts.Get(AppTexts.FILE_EXTENSION) + " '" + AppSettings.EncryptedFileExtention + "'";
             do
             {
                 Console.Clear();
                 Console.ForegroundColor = ConsoleColor.Blue;
-                Console.WriteLine("Settings");
+                Console.WriteLine(AppSettings.Texts.Get(AppTexts.SETTINGS));
                 Console.ForegroundColor = ConsoleColor.White;
                 Console.WriteLine("----------------------------------------");
                 Console.ForegroundColor = ConsoleColor.Gray;
                 Console.WriteLine("\t1." + ContectMenu);
                 Console.WriteLine("\t2." + ReplaceOriginalFile);
                 Console.WriteLine("\t3." + ExtensionAssiciation);
-                Console.WriteLine("\t4.Back");
+                Console.WriteLine("\t4." + AppSettings.Texts.Get(AppTexts.BACK));
                 Console.ForegroundColor = ConsoleColor.White;
-                Console.Write("Select an option: ");
+                Console.Write(AppSettings.Texts.Get(AppTexts.SELECT_OPTION));
                 string userInput = Console.ReadLine();
                 if (userInput.Length > 0)
                     option = userInput.Substring(0, 1);
@@ -169,7 +169,7 @@ namespace SmartLock
                         if (args.Length < 3)
                             ShowHelp();
                         else
-                            Functions.DecryptWithPassword(smartLock, args[1], args[2], false);
+                            Functions.DecryptWithPassword(args[1], args[2], false);
                         break;
                     default:
                         ShowHelp();
@@ -190,24 +190,22 @@ namespace SmartLock
         }
         private static void ShowHelp()
         {//Show help menu with all available commands
-            List<FieldInfo> options = typeof(Commands).GetFields(BindingFlags.Public | BindingFlags.Static | BindingFlags.FlattenHierarchy)
-                                        .Where(fi => fi.IsLiteral && !fi.IsInitOnly).ToList();
+            List<FieldInfo> options = typeof(Commands).GetFields()
+                                        .Where(fi => fi.IsInitOnly).ToList();
             Console.ForegroundColor = ConsoleColor.Gray;
             foreach (FieldInfo fi in options)
             {
-                if (fi.Name.EndsWith("Description"))
-                {
-                    Console.WriteLine(fi.GetRawConstantValue());
-                }
+                if(fi.GetValue(null).ToString().Length > 2) //Show only descriptions
+                    Console.WriteLine((string)fi.GetValue(null));
             }
             Console.ForegroundColor = ConsoleColor.White;
         }
-        private static void StatusChanged(UInt16 status)
+        private static void StatusChanged(string status)
         {//Event that triggers every time the smartLock instance status is changing
             try
             {
                 Console.ForegroundColor = ConsoleColor.Cyan;
-                Console.WriteLine("\t" + Status.Descriptions[Status.language][status]);
+                Console.WriteLine("\t" + Status.Get(status));
                 Console.ForegroundColor = ConsoleColor.White;
             }
             catch (Exception)
